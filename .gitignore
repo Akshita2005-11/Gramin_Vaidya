@@ -1,0 +1,17 @@
+# Hide API keys and sensitive files
+.env
+*.env
+.env.example
+
+# Hide Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Hide virtual environment (too large, not needed)
+venv/
+env/
+
+# Hide system files
+.DS_Store
+Thumbs.db
