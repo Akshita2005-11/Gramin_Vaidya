@@ -1,23 +1,35 @@
 # Gramin Vaidya — AI Backend
 
-## Setup karne ke liye:
+## How to Setup:
 
-1. Clone karo:
-git clone https://github.com/username/gramin-vaidya.git
+1. Clone the repository:
+git clone https://github.com/Akshita2005-11/Gramin_Vaidya.git
 
-2. Virtual environment banao:
+2. Create virtual environment:
 python -m venv venv
 venv\Scripts\activate
 
-3. Packages install karo:
+3. Install packages:
 pip install -r requirements.txt
 
-4. .env file banao:
-GROQ_API_KEY=apni-khud-ki-groq-key-yahan
-(Free key banao: https://console.groq.com)
+4. Create .env file and add your API key:
+GROQ_API_KEY=your-groq-api-key-here
+(Get free key from: https://console.groq.com)
 
-5. Server start karo:
+5. Start the server:
 python main.py
 
-6. Test karo:
+6. Test it:
 http://localhost:8000/health
+
+## API Endpoints:
+- POST /ask — Send health query
+- GET /health — Check server status
+
+## Supported Languages:
+Hindi, English, Bengali, Tamil, Telugu, Marathi, Gujarati,
+Kannada, Malayalam, Punjabi, Urdu, Odia, Assamese,
+Bhojpuri, Rajasthani, Haryanvi, Hinglish and more!
+
+## Emergency:
+If serious symptoms detected, AI will say "Call 108 immediately!"
