@@ -3,7 +3,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict
 from groq import Groq
 import google.generativeai as genai
 from PIL import Image
@@ -33,13 +33,26 @@ SUPPORTED_LANGUAGES = {
     "odia": "Odia", "assamese": "Assamese", "hinglish": "Hinglish"
 }
 
+# Hardcoded, simple disclaimers — not AI-generated, so wording stays simple and consistent every time
+DISCLAIMERS = {
+    "hindi": "*यह जवाब AI ने दिया है, सिर्फ शुरुआती जानकारी के लिए। सही जांच के लिए पास के डॉक्टर या क्लिनिक ज़रूर जाएं।*",
+    "english": "*This answer is given by AI, only for early guidance. Please visit a nearby doctor or clinic for a proper check-up.*",
+    "kannada": "*ಈ ಉತ್ತರವನ್ನು AI ನೀಡಿದೆ, ಇದು ಕೇವಲ ಆರಂಭಿಕ ಮಾಹಿತಿಗಾಗಿ. ಸರಿಯಾದ ಪರೀಕ್ಷೆಗಾಗಿ ಹತ್ತಿರದ ವೈದ್ಯರು ಅಥವಾ ಕ್ಲಿನಿಕ್‌ಗೆ ಭೇಟಿ ನೀಡಿ.*",
+    "marathi": "*हे उत्तर AI ने दिले आहे, फक्त सुरुवातीच्या माहितीसाठी. योग्य तपासणीसाठी जवळच्या डॉक्टरकडे किंवा दवाखान्यात जरूर जा.*",
+    "gujarati": "*આ જવાબ AI એ આપ્યો છે, ફક્ત શરૂઆતની જાણકારી માટે. યોગ્ય તપાસ માટે નજીકના ડોક્ટર અથવા ક્લિનિકની મુલાકાત જરૂર લો.*",
+    "punjabi": "*ਇਹ ਜਵਾਬ AI ਨੇ ਦਿੱਤਾ ਹੈ, ਸਿਰਫ਼ ਸ਼ੁਰੂਆਤੀ ਜਾਣਕਾਰੀ ਲਈ। ਸਹੀ ਜਾਂਚ ਲਈ ਨੇੜੇ ਦੇ ਡਾਕਟਰ ਜਾਂ ਕਲੀਨਿਕ ਜ਼ਰੂਰ ਜਾਓ।*",
+    "bengali": "*এই উত্তরটি AI দিয়েছে, শুধু প্রাথমিক তথ্যের জন্য। সঠিক পরীক্ষার জন্য কাছের ডাক্তার বা ক্লিনিকে যান।*",
+    "tamil": "*இந்த பதில் AI ஆல் வழங்கப்பட்டது, ஆரம்ப தகவலுக்காக மட்டுமே. சரியான பரிசோதனைக்கு அருகிலுள்ள மருத்துவரை அல்லது கிளினிக்கை அணுகவும்.*",
+    "telugu": "*ఈ సమాధానం AI ఇచ్చింది, ఇది కేవలం ప్రాథమిక సమాచారం కోసమే. సరైన పరీక్ష కోసం సమీపంలోని డాక్టర్ లేదా క్లినిక్‌ను సందర్శించండి.*",
+    "hinglish": "*Yeh jawab AI ne diya hai, sirf shuruaati jaankari ke liye. Sahi jaanch ke liye pass ke doctor ya clinic zaroor jaayein.*",
+}
+
+def get_disclaimer(default_language: Optional[str]) -> str:
+    key = (default_language or "hindi").strip().lower()
+    return DISCLAIMERS.get(key, DISCLAIMERS["hindi"])
+
 BASE_SYSTEM_PROMPT = """
 You are Gramin Vaidya, a professional and experienced village health assistant in India.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MANDATORY DISCLAIMER — ALWAYS FIRST LINE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Every single response, with no exceptions, MUST begin with a short, professional disclaimer as the very first line, translated into the reply language. The disclaimer must convey: "This is an AI-generated response intended only for early/preliminary assessment. Please visit a nearby clinic or doctor for a professional diagnosis." Phrase it naturally and professionally in the reply language (do not translate word-for-word if it sounds unnatural — convey the same meaning smoothly). Put it in italics or as a short standalone line, then a blank line, then the rest of the response.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONCISENESS RULE — MOST STRICTLY FOLLOW
@@ -55,6 +68,8 @@ Keep the ENTIRE response short and to the point. Guidelines:
 LANGUAGE RULE — MOST STRICTLY FOLLOW
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {language_instruction}
+ALL section headers must also be translated into the reply language. Never mix two languages in one response. ALL section headers/headings must always be formatted in BOLD (using double asterisks like **heading**) — never italics, never plain unformatted text.
+
 SIMPLE LANGUAGE RULE: When replying in Hindi or any Indian regional language, use simple, everyday spoken words that a rural villager with basic schooling would easily understand — the way people actually talk at home or with a local doctor, not formal/bookish/Sanskritized language. For example, prefer "जांच" over "आकलन", "इस्तेमाल" over "प्रयोग", "वजह" over "उद्देश्य", "लगाना" over "स्थानीय उपयोग करना". Avoid English-origin technical words where a common Hindi/regional word already exists and is widely understood (e.g. "खुजली" not "इचिंग"). Keep sentences short and direct.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -133,6 +148,9 @@ class HealthQuery(BaseModel):
     text: str = ""
     image_base64: Optional[str] = None
     default_language: Optional[str] = None  # e.g. "hindi", "kannada", "english" — sent by the app
+    conversation_history: Optional[List[Dict[str, str]]] = None
+    # Each item: {"role": "user" or "assistant", "text": "..."}
+    # App must build and send this list itself — backend does not store any memory.
 
 class HealthResponse(BaseModel):
     response: str
@@ -155,11 +173,25 @@ async def ask_gramin_vaidya(query: HealthQuery):
         language_instruction = build_language_instruction(query.default_language)
         system_prompt = BASE_SYSTEM_PROMPT.format(language_instruction=language_instruction)
 
+        # Build a simple text summary of prior turns, if the app sent any
+        history_text = ""
+        if query.conversation_history:
+            lines = []
+            for turn in query.conversation_history:
+                role = turn.get("role", "user")
+                text = turn.get("text", "")
+                label = "User" if role == "user" else "Gramin Vaidya"
+                lines.append(f"{label}: {text}")
+            history_text = "\n".join(lines)
+
         if query.image_base64:
             image_bytes = base64.b64decode(query.image_base64)
             image = Image.open(io.BytesIO(image_bytes))
 
-            gemini_prompt = system_prompt + "\n\nThe user has sent a photo of a health concern (e.g. skin issue, wound, rash, eye problem)."
+            gemini_prompt = system_prompt
+            if history_text:
+                gemini_prompt += f"\n\nHere is the earlier conversation with this user, for context:\n{history_text}\n\nUse this context if the new message refers back to it (e.g. follow-up questions like 'what medicine did you mean'). If the new message is about a completely different/new health concern, ignore the old context and treat it fresh."
+            gemini_prompt += "\n\nThe user has sent a photo of a health concern (e.g. skin issue, wound, rash, eye problem)."
             if query.text.strip():
                 gemini_prompt += f" They also wrote this message: {query.text}"
             gemini_prompt += "\n\nLook at the image carefully, classify the severity tier, and respond following the exact tier format above. Remember the mandatory [EMERGENCY:YES] or [EMERGENCY:NO] tag at the end."
@@ -168,18 +200,27 @@ async def ask_gramin_vaidya(query: HealthQuery):
             raw_text = gemini_response.text
 
         else:
+            groq_messages = [{"role": "system", "content": system_prompt}]
+
+            if history_text:
+                groq_messages.append({
+                    "role": "system",
+                    "content": f"Here is the earlier conversation with this user, for context:\n{history_text}\n\nUse this context if the new message refers back to it. If the new message is about a completely different/new health concern, ignore the old context and treat it fresh."
+                })
+
+            groq_messages.append({"role": "user", "content": query.text})
+
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": query.text}
-                ],
+                messages=groq_messages,
                 temperature=0.3,
                 max_tokens=1500
             )
             raw_text = response.choices[0].message.content
 
         response_text, is_emergency = extract_emergency_and_clean(raw_text)
+        disclaimer = get_disclaimer(query.default_language)
+        response_text = f"{disclaimer}\n\n{response_text}"
 
         return HealthResponse(response=response_text, is_emergency=is_emergency)
 
